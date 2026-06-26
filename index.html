@@ -38,7 +38,6 @@
             const ventasRaw = document.getElementById('totalVentas').value.trim();
             const ventas = parseFloat(ventasRaw.replace(/\./g, '').replace(',', '.')) || 0;
             
-            // Validación inteligente
             let errores = [];
             if (!fileInput.files[0]) errores.push("el archivo de Excel");
             if (!ventas) errores.push("el monto total de ventas");
@@ -85,9 +84,7 @@
                 const costo = parseFloat(String(row[costoCol] ?? 0).replace(',', '.')) || 0;
 
                 if (mov > 0) {
-                    if (!resumen[nombre]) {
-                        resumen[nombre] = { cant: 0, costo: 0 };
-                    }
+                    if (!resumen[nombre]) resumen[nombre] = { cant: 0, costo: 0 };
                     resumen[nombre].cant += mov;
                     resumen[nombre].costo = costo;
                 }
@@ -104,10 +101,19 @@
             const totalCant = datosFinales.reduce((acc, item) => acc + item.Cantidad, 0);
             const porcentaje = ventas > 0 ? ((perdidaTotal / ventas) * 100).toFixed(1) : "0";
 
+            const porcentajeNum = parseFloat(porcentaje);
+            const esCritico = porcentajeNum > 3;
+            const elPorcentaje = document.getElementById('kpi-porcentaje');
+            
+            elPorcentaje.className = 'kpi-value ' + (esCritico ? 'merma-rojo' : 'merma-verde');
+            elPorcentaje.innerHTML = `
+                ${porcentaje}% 
+                <span class="estado-label">${esCritico ? "Fuera de parámetro" : "Dentro de parámetro"}</span>
+            `;
+
             document.getElementById('kpi-mermas').innerText = totalCant;
-            document.getElementById('kpi-perdida').innerText = '$' + perdidaTotal.toLocaleString('es-AR');
-            document.getElementById('kpi-ventas').innerText = '$' + ventas.toLocaleString('es-AR');
-            document.getElementById('kpi-porcentaje').innerText = porcentaje + '%';
+            document.getElementById('kpi-perdida').innerText = '$' + perdidaTotal.toLocaleString('es-AR', {minimumFractionDigits: 2});
+            document.getElementById('kpi-ventas').innerText = '$' + ventas.toLocaleString('es-AR', {minimumFractionDigits: 2});
 
             const formatoAR = (num) => num.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             
