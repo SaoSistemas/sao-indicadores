@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Analizador de Mermas SÃO</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Analizador de Mermas SÃO</h1>
+        <div class="upload-box">
+            <input type="file" id="excelFile" accept=".csv,.xls,.xlsx" />
+            <input type="text" id="totalVentas" placeholder="Ej: 1.302.760,00" />
+            <button onclick="procesarYAnalizar()">Analizar</button>
+        </div>
+
+        <div id="dashboard-container" class="kpi-container">
+            <div class="kpi-box"><h4>Cant. Mermas</h4><span id="kpi-mermas" class="kpi-value">0</span></div>
+            <div class="kpi-box"><h4>Pérdida Total</h4><span id="kpi-perdida" class="kpi-value">$0</span></div>
+            <div class="kpi-box"><h4>Total Ventas</h4><span id="kpi-ventas" class="kpi-value">$0</span></div>
+            <div class="kpi-box"><h4>% Merma</h4><span id="kpi-porcentaje" class="kpi-value">0%</span></div>
+        </div>
+        <div id="analysisText"></div>
+    </div>
+
+    <div id="errorModal" class="modal">
+        <div class="modal-content">
+            <h3>¡Atención!</h3>
+            <p id="modalText"></p>
+            <button onclick="document.getElementById('errorModal').style.display='none'">Aceptar</button>
+        </div>
+    </div>
+
+    <script>
+        async function procesarYAnalizar() {
+            const fileInput = document.getElementById('excelFile');
+            const ventasRaw = document.getElementById('totalVentas').value.trim();
+            const ventas = parseFloat(ventasRaw.replace(/\./g, '').replace(',', '.')) || 0;
+            
+            // Validación inteligente
+            let errores = [];
+            if (!fileInput.files[0]) errores.push("el archivo de Excel");
+            if (!ventas) errores.push("el monto total de ventas");
+            
+            if (errores.length > 0) {
+                document.getElementById('modalText').innerText = "Falta completar: " + errores.join(" y ") + ".";
+                document.getElementById('errorModal').style.display = 'block';
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const resumen = {};
+
+            async function leerFilas(file) {
+                const texto = await file.text();
+                if (texto.trimStart().startsWith('<')) {
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(texto, 'text/html');
+                    const filas = [];
+                    doc.querySelectorAll('tr').forEach(tr => {
+                        const celdas = [];
+                        tr.querySelectorAll('td, th').forEach(td => celdas.push(td.innerText.trim()));
+                        if (celdas.length > 0) filas.push(celdas);
+                    });
+                    return filas;
+                } else {
+                    const buffer = await file.arrayBuffer();
+                    const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
+                    return XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
+                }
+            }
+
+            const jsonData = await leerFilas(file);
+            const headers = jsonData[1];
+            const movCol = headers.lastIndexOf("MOV");
+            const costoCol = headers.lastIndexOf("COSTU");
+
+            for (let i = 2; i < jsonData.length; i++) {
+                const row = jsonData[i];
+                const nombre = row[1];
+                if (!nombre) continue;
+
+                const mov = parseFloat(String(row[movCol] ?? 0).replace(',', '.')) || 0;
+                const costo = parseFloat(String(row[costoCol] ?? 0).replace(',', '.')) || 0;
+
+                if (mov > 0) {
+                    if (!resumen[nombre]) {
+                        resumen[nombre] = { cant: 0, costo: 0 };
+                    }
+                    resumen[nombre].cant += mov;
+                    resumen[nombre].costo = costo;
+                }
+            }
+
+            const datosFinales = Object.keys(resumen).map(p => ({
+                Producto: p,
+                Cantidad: resumen[p].cant,
+                PrecioUnitario: resumen[p].costo,
+                Total: resumen[p].cant * resumen[p].costo
+            }));
+
+            const perdidaTotal = datosFinales.reduce((acc, item) => acc + item.Total, 0);
+            const totalCant = datosFinales.reduce((acc, item) => acc + item.Cantidad, 0);
+            const porcentaje = ventas > 0 ? ((perdidaTotal / ventas) * 100).toFixed(1) : "0";
+
+            document.getElementById('kpi-mermas').innerText = totalCant;
+            document.getElementById('kpi-perdida').innerText = '$' + perdidaTotal.toLocaleString('es-AR');
+            document.getElementById('kpi-ventas').innerText = '$' + ventas.toLocaleString('es-AR');
+            document.getElementById('kpi-porcentaje').innerText = porcentaje + '%';
+
+            const formatoAR = (num) => num.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            
+            let html = `
+                <h3>Resumen por Producto</h3>
+                <table>
+                    <tr style="background:#f2f2f2;"><th>Producto</th><th>Monto Total</th></tr>
+                    ${datosFinales.map(d => `<tr><td>${d.Producto}</td><td>$${formatoAR(d.Total)}</td></tr>`).join('')}
+                </table>
+                <h3>Detalle Completo</h3>
+                <table>
+                    <tr style="background:#f2f2f2;"><th>Producto</th><th>Cantidad</th><th>P. Unitario</th><th>Total</th></tr>
+                    ${datosFinales.map(d => `<tr><td>${d.Producto}</td><td>${d.Cantidad}</td><td>$${formatoAR(d.PrecioUnitario)}</td><td>$${formatoAR(d.Total)}</td></tr>`).join('')}
+                </table>
+            `;
+            document.getElementById('analysisText').innerHTML = html;
+        }
+    </script>
+</body>
+</html>
