@@ -1,31 +1,77 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
-    <title>Analizador de Mermas SÃO</title>
+    <title>Analizador SÃO</title>
     <link rel="icon" type="image/png" href="favicon.png.png">
     <link rel="stylesheet" href="style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        .alerta-critica {
+            background-color: #ffcccc !important;
+            color: #050505;
+            font-weight: bold;
+        }
+
+        .alerta-carga {
+            background-color: #ffe6cc !important;
+            color: #0c0c0b;
+        }
+
+        .alerta-receta {
+            background-color: #fff9c4 !important;
+            color: #080808;
+        }
+
+        .diagnostico-box {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 8px;
+            font-weight: bold;
+            text-align: center;
+            border: 1px solid #ccc;
+        }
+    </style>
 </head>
+
 <body>
-    <div class="container">
-        <h1>Analizador de Mermas SÃO</h1>
+    <div id="selection-screen" class="container" style="text-align: center;">
+        <h1>Analizador SÃO</h1>
+        <div class="upload-box">
+            <button onclick="iniciarModo('mermas')" style="margin-bottom:10px;">Análisis de Mermas</button>
+            <button onclick="iniciarModo('desvios')" style="background: #e67e22;">Análisis de Desvíos</button>
+        </div>
+    </div>
+
+    <div id="work-screen" class="container" style="display: none;">
+        <h1 id="titulo-modo">Analizador</h1>
         <div class="upload-box">
             <input type="file" id="excelFile" accept=".csv,.xls,.xlsx" />
             <input type="text" id="totalVentas" placeholder="Ej: 1.302.760,00" />
             <button onclick="procesarYAnalizar()">Analizar</button>
+            <button onclick="volver()" style="background:#7f8c8d; margin-top:10px;">Volver</button>
         </div>
 
         <div id="dashboard-container" class="kpi-container">
-            <div class="kpi-box"><h4>Cant. Mermas</h4><span id="kpi-mermas" class="kpi-value">0</span></div>
-            <div class="kpi-box"><h4>Pérdida Total</h4><span id="kpi-perdida" class="kpi-value">$0</span></div>
-            <div class="kpi-box"><h4>Total Ventas</h4><span id="kpi-ventas" class="kpi-value">$0</span></div>
-            <div class="kpi-box"><h4>% Merma</h4><span id="kpi-porcentaje" class="kpi-value">0%</span></div>
+            <div class="kpi-box">
+                <h4 id="kpi-titulo-cantidad">Cant.</h4><span id="kpi-cantidad" class="kpi-value">0</span>
+            </div>
+            <div class="kpi-box">
+                <h4>Pérdida Total</h4><span id="kpi-perdida" class="kpi-value">$0</span>
+            </div>
+            <div id="box-ventas" class="kpi-box">
+                <h4>Total Ventas</h4><span id="kpi-ventas" class="kpi-value">$0</span>
+            </div>
+            <div id="box-porcentaje" class="kpi-box">
+                <h4>% Merma</h4><span id="kpi-porcentaje" class="kpi-value">0%</span>
+            </div>
         </div>
+        <div id="diagnostico-panel"></div>
         <div id="analysisText"></div>
     </div>
 
-    <div id="errorModal" class="modal">
+    <div id="errorModal" class="modal" style="display:none;">
         <div class="modal-content">
             <h3>¡Atención!</h3>
             <p id="modalText"></p>
@@ -34,33 +80,53 @@
     </div>
 
     <script>
+        let modoActual = '';
+        let datosParaExportar = [];
+
+
+        function iniciarModo(modo) {
+            modoActual = modo;
+            document.getElementById('selection-screen').style.display = 'none';
+            document.getElementById('work-screen').style.display = 'block';
+            document.getElementById('titulo-modo').innerText = (modo === 'mermas') ? 'Análisis de Mermas' : 'Análisis de Desvíos';
+            document.getElementById('kpi-titulo-cantidad').innerText = (modo === 'mermas') ? 'Cant. Mermas' : 'Cant. Desvíos';
+            document.getElementById('totalVentas').style.display = (modo === 'mermas') ? 'block' : 'none';
+            document.getElementById('box-ventas').style.display = (modo === 'mermas') ? 'block' : 'none';
+            document.getElementById('box-porcentaje').style.display = (modo === 'mermas') ? 'block' : 'none';
+            document.getElementById('diagnostico-panel').innerHTML = '';
+        }
+
+        function volver() {
+            document.getElementById('selection-screen').style.display = 'block';
+            document.getElementById('work-screen').style.display = 'none';
+            document.getElementById('analysisText').innerHTML = '';
+            document.getElementById('diagnostico-panel').innerHTML = '';
+        }
+
+        function descargarReporte() {
+            if (datosParaExportar.length === 0) return;
+            const ws = XLSX.utils.json_to_sheet(datosParaExportar);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Reporte");
+            XLSX.writeFile(wb, `Reporte_${modoActual}_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`);
+        }
+
         async function procesarYAnalizar() {
             const fileInput = document.getElementById('excelFile');
-            const ventasRaw = document.getElementById('totalVentas').value.trim();
-            const ventas = parseFloat(ventasRaw.replace(/\./g, '').replace(',', '.')) || 0;
-            
-            let errores = [];
-            if (!fileInput.files[0]) errores.push("el archivo de Excel");
-            if (!ventas) errores.push("el monto total de ventas");
-            
-            if (errores.length > 0) {
-                document.getElementById('modalText').innerText = "Falta completar: " + errores.join(" y ") + ".";
-                document.getElementById('errorModal').style.display = 'block';
+            const file = fileInput.files[0];
+            if (!file) {
+                document.getElementById('modalText').innerText = "Falta cargar el archivo de Excel.";
+                document.getElementById('errorModal').style.display = 'flex'; // Usamos flex para centrar
                 return;
             }
-
-            const file = fileInput.files[0];
-            const resumen = {};
 
             async function leerFilas(file) {
                 const texto = await file.text();
                 if (texto.trimStart().startsWith('<')) {
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(texto, 'text/html');
+                    const doc = new DOMParser().parseFromString(texto, 'text/html');
                     const filas = [];
                     doc.querySelectorAll('tr').forEach(tr => {
-                        const celdas = [];
-                        tr.querySelectorAll('td, th').forEach(td => celdas.push(td.innerText.trim()));
+                        const celdas = Array.from(tr.querySelectorAll('td, th')).map(td => td.innerText.trim());
                         if (celdas.length > 0) filas.push(celdas);
                     });
                     return filas;
@@ -73,65 +139,161 @@
 
             const jsonData = await leerFilas(file);
             const headers = jsonData[1];
-            const movCol = headers.lastIndexOf("MOV");
-            const costoCol = headers.lastIndexOf("COSTU");
+            const formatoAR = (num) => num.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-            for (let i = 2; i < jsonData.length; i++) {
-                const row = jsonData[i];
-                const nombre = row[1];
-                if (!nombre) continue;
+            if (modoActual === 'mermas') {
+                const ventasRaw = document.getElementById('totalVentas').value.trim();
+                const ventas = parseFloat(ventasRaw.replace(/\./g, '').replace(',', '.')) || 0;
+                if (!ventas) { alert("Falta el monto de ventas"); return; }
 
-                const mov = parseFloat(String(row[movCol] ?? 0).replace(',', '.')) || 0;
-                const costo = parseFloat(String(row[costoCol] ?? 0).replace(',', '.')) || 0;
+                const movCol = headers.lastIndexOf("MOV");
+                const costoCol = headers.lastIndexOf("COSTU");
+                const resumen = {};
 
-                if (mov > 0) {
-                    if (!resumen[nombre]) resumen[nombre] = { cant: 0, costo: 0 };
-                    resumen[nombre].cant += mov;
-                    resumen[nombre].costo = costo;
+                for (let i = 2; i < jsonData.length; i++) {
+                    const row = jsonData[i];
+                    const nombre = row[1];
+                    if (!nombre) continue;
+                    const mov = parseFloat(String(row[movCol] ?? 0).replace(',', '.')) || 0;
+                    const costo = parseFloat(String(row[costoCol] ?? 0).replace(',', '.')) || 0;
+                    if (mov > 0) {
+                        if (!resumen[nombre]) resumen[nombre] = { cant: 0, costo: 0 };
+                        resumen[nombre].cant += mov;
+                        resumen[nombre].costo = costo;
+                    }
+                }
+
+                const datosFinales = Object.keys(resumen).map(p => ({ Producto: p, Cantidad: resumen[p].cant, PrecioUnitario: resumen[p].costo, Total: resumen[p].cant * resumen[p].costo }));
+                const perdidaTotal = datosFinales.reduce((acc, item) => acc + item.Total, 0);
+                const totalCant = datosFinales.reduce((acc, item) => acc + item.Cantidad, 0);
+                const porcentaje = ventas > 0 ? ((perdidaTotal / ventas) * 100).toFixed(1) : "0";
+                datosParaExportar = datosFinales;
+
+                const elPorcentaje = document.getElementById('kpi-porcentaje');
+                elPorcentaje.className = 'kpi-value ' + (parseFloat(porcentaje) > 3 ? 'merma-rojo' : 'merma-verde');
+                elPorcentaje.innerHTML = `${porcentaje}% <span class="estado-label">${parseFloat(porcentaje) > 3 ? "Fuera de parámetro" : "Dentro de parámetro"}</span>`;
+
+                document.getElementById('kpi-cantidad').innerText = totalCant.toFixed(2);
+                document.getElementById('kpi-perdida').innerText = '$' + perdidaTotal.toLocaleString('es-AR', { minimumFractionDigits: 2 });
+                document.getElementById('kpi-ventas').innerText = '$' + ventas.toLocaleString('es-AR', { minimumFractionDigits: 2 });
+
+                document.getElementById('analysisText').innerHTML = `<div style="text-align: right; margin-bottom: 10px;">
+        <button onclick="descargarReporte()" style="padding: 8px 15px; background: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer;">
+            ⬇️ Descargar Excel
+        </button>
+    </div> <h3>Resumen por Producto</h3><table><tr style="background:#f2f2f2;"><th>Producto</th><th>Monto Total</th></tr>${datosFinales.map(d => `<tr><td>${d.Producto}</td><td>$${formatoAR(d.Total)}</td></tr>`).join('')}</table><h3>Detalle Completo</h3><table><tr style="background:#f2f2f2;"><th>Producto</th><th>Cantidad</th><th>P. Unitario</th><th>Total</th></tr>${datosFinales.map(d => `<tr><td>${d.Producto}</td><td>${d.Cantidad}</td><td>$${formatoAR(d.PrecioUnitario)}</td><td>$${formatoAR(d.Total)}</td></tr>`).join('')}</table>`;
+            } else {
+                const stockCol = headers.indexOf("II*");
+                const buyCol = headers.indexOf("BUY");
+                const movCol = headers.indexOf("MOV");
+                const desvCol = headers.lastIndexOf("DESV");
+                const desvVCol = headers.lastIndexOf("DESV V");
+
+                const datos = [];
+                let contAdm = 0, contMerma = 0, contReceta = 0;
+
+                for (let i = 2; i < jsonData.length; i++) {
+                    const row = jsonData[i];
+                    const nombre = row[1];
+                    if (!nombre) continue;
+
+                    const stockI = parseFloat(String(row[stockCol] ?? 0).replace(',', '.')) || 0;
+                    const buy = parseFloat(String(row[buyCol] ?? 0).replace(',', '.')) || 0;
+                    const usoReal = parseFloat(String(row[movCol] ?? 0).replace(',', '.')) || 0;
+                    const desv = parseFloat(String(row[desvCol] ?? 0).replace(',', '.')) || 0;
+                    const rawDesvV = parseFloat(String(row[desvVCol] ?? 0).replace(',', '.'));
+                    const desvV = (isNaN(rawDesvV)) ? 0 : rawDesvV;
+
+                    let alerta = "", clase = "", orden = 0;
+                    const tieneErrorAdm = (stockI < 0 || (stockI + buy) < usoReal || (buy === 0 && usoReal > 0));
+                    const tieneDesvio = Math.abs(desv) > 0.01;
+
+                    if (tieneErrorAdm) {
+                        alerta = (tieneDesvio) ? "⚠️ Error Adm. + Desvío físico" : "⚠️ Pendiente: Facturas no cargadas";
+                        clase = "alerta-critica";
+                        orden = 1;
+                        contAdm++;
+                        datos.push({ Producto: nombre, Desv: desv, Total: desvV, Alerta: alerta, Clase: clase, Orden: orden });
+                    } else if (tieneDesvio) {
+                        if (Math.abs(desv) > (usoReal * 0.05)) {
+                            alerta = "⚠️ Merma no declarada / Error de carga";
+                            clase = "alerta-merma";
+                            orden = 2;
+                            contMerma++;
+                        } else {
+                            alerta = "🔧 Ajuste de receta necesario";
+                            clase = "alerta-receta";
+                            orden = 3;
+                            contReceta++;
+                        }
+                        datos.push({ Producto: nombre, Desv: desv, Total: desvV, Alerta: alerta, Clase: clase, Orden: orden });
+                    }
+                }
+
+                if (datos.length === 0) {
+                    document.getElementById('diagnostico-panel').innerHTML =
+                        `<div class="diagnostico-box" style="background:#d4edda; color: #155724; padding: 15px; border-radius: 8px;">
+                ✅ ¡Excelente! No se detectaron errores administrativos ni desvíos en este periodo.
+             </div>`;
+                    document.getElementById('kpi-titulo-cantidad').innerText = "Cant. Desvíos";
+                    document.getElementById('kpi-cantidad').innerText = "0";
+                    document.getElementById('kpi-perdida').innerText = "$0,00";
+                    document.getElementById('analysisText').innerHTML = "";
+                } else {
+                    datos.sort((a, b) => a.Orden - b.Orden || b.Total - a.Total);
+                    datosParaExportar = datos;
+
+                    const soloAdm = contAdm > 0 && contMerma === 0 && contReceta === 0;
+                    const esCeroDesvio = datos.every(d => Math.abs(d.Desv) <= 0.01);
+                    document.getElementById('kpi-titulo-cantidad').innerText = (soloAdm && esCeroDesvio) ? "Facturas Pendientes" : "Cant. Desvíos";
+                    const totalAlertas = contAdm + contMerma + contReceta;
+                    const pctAdm = totalAlertas > 0 ? ((contAdm / totalAlertas) * 100).toFixed(0) : 0;
+                    document.getElementById('diagnostico-panel').innerHTML = `<div class="diagnostico-box" style="background:${pctAdm > 50 ? '#ffcccc' : '#d4edda'}">Diagnóstico: ${pctAdm}% Errores Administrativos, ${(totalAlertas > 0 ? (contMerma / totalAlertas * 100).toFixed(0) : 0)}% Mermas, ${(totalAlertas > 0 ? (contReceta / totalAlertas * 100).toFixed(0) : 0)}% Recetas.</div>`;
+                    const totalPerdida = datos.reduce((acc, item) => acc + item.Total, 0);
+                    if (soloAdm && esCeroDesvio) {
+                        document.getElementById('kpi-cantidad').innerText = datos.length.toString();
+                    } else {
+                        document.getElementById('kpi-cantidad').innerText = datos.reduce((acc, item) => acc + Math.abs(item.Desv), 0).toFixed(2);
+                    }
+                    document.getElementById('kpi-perdida').innerText = '$' + totalPerdida.toLocaleString('es-AR', { minimumFractionDigits: 2 });
+                    document.getElementById('analysisText').innerHTML = `
+                    <div style="text-align: right; margin-bottom: 10px;">
+        <button onclick="descargarReporte()" style="padding: 8px 15px; background: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer;">
+            ⬇️ Descargar Excel
+        </button>
+    </div>
+        <p style="text-align: center; margin: 15px 0;">
+            <span onclick="document.getElementById('glosarioModal').style.display='flex'" style="color:#0066cc; cursor:pointer; text-decoration:underline; font-weight:bold;">
+                ℹ️ ¿Qué significa el signo del Desvío?
+            </span>
+        </p>
+        <h3>Reporte de Desvíos</h3>
+        <table>
+            <tr style="background:#f2f2f2;"><th>Producto</th><th>Desvío</th><th>Valor</th><th>Validación</th></tr>
+            ${datos.map(d => `<tr class="${d.Clase}"><td>${d.Producto}</td><td>${d.Desv}</td><td>$${formatoAR(d.Total)}</td><td><strong>${d.Alerta}</strong></td></tr>`).join('')}
+        </table>`;
                 }
             }
-
-            const datosFinales = Object.keys(resumen).map(p => ({
-                Producto: p,
-                Cantidad: resumen[p].cant,
-                PrecioUnitario: resumen[p].costo,
-                Total: resumen[p].cant * resumen[p].costo
-            }));
-
-            const perdidaTotal = datosFinales.reduce((acc, item) => acc + item.Total, 0);
-            const totalCant = datosFinales.reduce((acc, item) => acc + item.Cantidad, 0);
-            const porcentaje = ventas > 0 ? ((perdidaTotal / ventas) * 100).toFixed(1) : "0";
-
-            const porcentajeNum = parseFloat(porcentaje);
-            const esCritico = porcentajeNum > 3;
-            const elPorcentaje = document.getElementById('kpi-porcentaje');
-            
-            elPorcentaje.className = 'kpi-value ' + (esCritico ? 'merma-rojo' : 'merma-verde');
-            elPorcentaje.innerHTML = `
-                ${porcentaje}% 
-                <span class="estado-label">${esCritico ? "Fuera de parámetro" : "Dentro de parámetro"}</span>
-            `;
-
-            document.getElementById('kpi-mermas').innerText = totalCant;
-            document.getElementById('kpi-perdida').innerText = '$' + perdidaTotal.toLocaleString('es-AR', {minimumFractionDigits: 2});
-            document.getElementById('kpi-ventas').innerText = '$' + ventas.toLocaleString('es-AR', {minimumFractionDigits: 2});
-
-            const formatoAR = (num) => num.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            
-            let html = `
-                <h3>Resumen por Producto</h3>
-                <table>
-                    <tr style="background:#f2f2f2;"><th>Producto</th><th>Monto Total</th></tr>
-                    ${datosFinales.map(d => `<tr><td>${d.Producto}</td><td>$${formatoAR(d.Total)}</td></tr>`).join('')}
-                </table>
-                <h3>Detalle Completo</h3>
-                <table>
-                    <tr style="background:#f2f2f2;"><th>Producto</th><th>Cantidad</th><th>P. Unitario</th><th>Total</th></tr>
-                    ${datosFinales.map(d => `<tr><td>${d.Producto}</td><td>${d.Cantidad}</td><td>$${formatoAR(d.PrecioUnitario)}</td><td>$${formatoAR(d.Total)}</td></tr>`).join('')}
-                </table>
-            `;
-            document.getElementById('analysisText').innerHTML = html;
         }
     </script>
+
+    <div id="glosarioModal" class="modal">
+        <div class="modal-content">
+            <h3>¿Qué significa el signo del Desvío?</h3>
+            <p>La fórmula es: <strong>Desvío = Stock Físico - Stock Teórico</strong></p>
+            <hr>
+            <p>• <strong>(+) Positivo (Sobrante):</strong> Tienes más mercadería que la registrada. Posible error de
+                carga de facturas o falta registrar ventas.</p>
+            <p>• <strong>(-) Negativo (Faltante):</strong> Tienes menos mercadería que la registrada. Posible merma no
+                declarada, consumo no registrado o error de receta.</p>
+            <p>• <strong>¿Desvío 0 pero aparece en el reporte?</strong><br>
+                Significa que detectamos un <strong>Error Administrativo</strong>. El sistema indica que empezaste con
+                stock negativo (ej: -8 cucharas), lo cual es físicamente imposible. Esto ocurre porque <strong>faltan
+                    cargar facturas de compra</strong>. El sistema "sabe" que vendiste algo que nunca entró a bodega.
+            </p>
+            <button onclick="document.getElementById('glosarioModal').style.display='none'">Entendido</button>
+        </div>
+    </div>
 </body>
+
 </html>

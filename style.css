@@ -31,8 +31,31 @@ input { padding: 12px; margin: 10px 0; width: 100%; border: 1px solid #ccc; bord
 button { background: var(--primary); color: white; border: none; padding: 15px; border-radius: 6px; cursor: pointer; width: 100%; font-weight: bold; font-size: 16px; transition: background 0.3s; }
 button:hover { background: #0c5a45; }
 
-.modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); }
-.modal-content { background: #fff; margin: 15% auto; padding: 30px; border-radius: 12px; width: 350px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+.modal { 
+    display: none; 
+    position: fixed; 
+    z-index: 1000; 
+    left: 0; top: 0; 
+    width: 100%; height: 100%; 
+    background: rgba(0,0,0,0.5);
+    align-items: center; 
+    justify-content: center; 
+}
+
+.modal-content { 
+    background: #fff; 
+    padding: 30px; 
+    border-radius: 12px; 
+    width: 90%; 
+    max-width: 500px; 
+    text-align: center; 
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3); 
+}
+
+.modal.mostrar {
+    display: flex; 
+}
+
 .modal-content h3 { color: var(--error); margin-top: 0; }
 .modal-content button { background: var(--primary); margin-top: 20px; }
 
@@ -65,3 +88,15 @@ th { background-color: var(--primary); color: white; }
     font-weight: 700; 
     color: #666; 
 }
+
+/* Estilo del "link" del glosario */
+.glosario-link { 
+    color: #0066cc; 
+    cursor: pointer; 
+    text-decoration: underline; 
+    font-weight: bold; 
+    display: block;
+    margin: 15px 0;
+    text-align: center;
+}
+
