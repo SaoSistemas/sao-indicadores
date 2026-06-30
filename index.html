@@ -40,15 +40,17 @@
         <h1>Indicadores SÃO</h1>
         <div class="upload-box">
             <button onclick="iniciarModo('mermas')" style="margin-bottom:10px;">Indicador de Mermas</button>
-            <button onclick="iniciarModo('desvios')" style="background: #e67e22;">Indicador de Desvíos</button>
+            <button style="background: #e67e22;">Indicador de Desvíos</button>
+            <!-- onclick="iniciarModo('desvios')"  -->
         </div>
     </div>
 
     <div id="work-screen" class="container" style="display: none;">
         <h1 id="titulo-modo">Indicador</h1>
         <div class="upload-box">
+            <p>Sube el archivo de Excel exportado desde SÃO (CSV, XLS o XLSX)</p>
             <input type="file" id="excelFile" accept=".csv,.xls,.xlsx" />
-            <input type="text" id="totalVentas" placeholder="Ej: 1.302.760,00" />
+            <input type="text" id="totalVentas" placeholder="Ingrese el total de ventas del periodo" />
             <button onclick="procesarYAnalizar()">Analizar</button>
             <button onclick="volver()" style="background:#7f8c8d; margin-top:10px;">Volver</button>
         </div>
