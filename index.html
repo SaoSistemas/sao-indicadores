@@ -40,7 +40,7 @@
         <h1>Indicadores SÃO</h1>
         <div class="upload-box">
             <button onclick="iniciarModo('mermas')" style="margin-bottom:10px;">Indicador de Mermas</button>
-            <button style="background: #e67e22;">Indicador de Desvíos</button>
+            <button style="background: #e67e22;" onclick="mostrarNoDisponible()">Indicador de Desvíos</button>
             <!-- onclick="iniciarModo('desvios')"  -->
         </div>
     </div>
@@ -48,7 +48,7 @@
     <div id="work-screen" class="container" style="display: none;">
         <h1 id="titulo-modo">Indicador</h1>
         <div class="upload-box">
-            <p>Sube el archivo de Excel exportado desde SÃO (CSV, XLS o XLSX)</p>
+            <p>Sube el archivo de Excel exportado desde Toteat (CSV, XLS o XLSX)</p>
             <input type="file" id="excelFile" accept=".csv,.xls,.xlsx" />
             <input type="text" id="totalVentas" placeholder="Ingrese el total de ventas del periodo" />
             <button onclick="procesarYAnalizar()">Analizar</button>
@@ -97,6 +97,11 @@
             document.getElementById('box-porcentaje').style.display = (modo === 'mermas') ? 'block' : 'none';
             document.getElementById('diagnostico-panel').innerHTML = '';
         }
+
+        function mostrarNoDisponible() {
+    document.getElementById('modalText').innerText = "Esta sección se encuentra en mantenimiento. Estamos realizando actualizaciones, vuelve a intentarlo más tarde.";
+    document.getElementById('errorModal').style.display = 'flex';
+}
 
         function volver() {
             document.getElementById('selection-screen').style.display = 'block';
