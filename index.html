@@ -66,7 +66,8 @@
                 <h4>Total Ventas</h4><span id="kpi-ventas" class="kpi-value">$0</span>
             </div>
             <div id="box-porcentaje" class="kpi-box">
-                <h4>% Merma</h4><span id="kpi-porcentaje" class="kpi-value">0%</span>
+                <h4>Estado Merma</h4>
+                <span id="kpi-porcentaje" class="kpi-value">-</span>
             </div>
         </div>
         <div id="diagnostico-panel"></div>
@@ -99,9 +100,9 @@
         }
 
         function mostrarNoDisponible() {
-    document.getElementById('modalText').innerText = "Esta sección se encuentra en mantenimiento. Estamos realizando actualizaciones, vuelve a intentarlo más tarde.";
-    document.getElementById('errorModal').style.display = 'flex';
-}
+            document.getElementById('modalText').innerText = "Esta sección se encuentra en mantenimiento. Estamos realizando actualizaciones, vuelve a intentarlo más tarde.";
+            document.getElementById('errorModal').style.display = 'flex';
+        }
 
         function volver() {
             document.getElementById('selection-screen').style.display = 'block';
@@ -111,13 +112,37 @@
         }
 
         function descargarReporte() {
-            if (datosParaExportar.length === 0) return;
-            const ws = XLSX.utils.json_to_sheet(datosParaExportar);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "Reporte");
-            XLSX.writeFile(wb, `Reporte_${modoActual}_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`);
-        }
+    if (datosParaExportar.length === 0) return;
 
+    // 1. Crear el libro de trabajo
+    const wb = XLSX.utils.book_new();
+
+    // 2. Si es Mermas, crear las pestañas (Dashboard, Resumen, Detalle)
+    if (modoActual === 'mermas') {
+        // Pestaña 1: Resumen (KPIs)
+        const kpiData = [
+            ["Indicador", "Valor"],
+            ["Cant. Mermas", document.getElementById('kpi-cantidad').innerText],
+            ["Pérdida Total", document.getElementById('kpi-perdida').innerText],
+            ["Total Ventas", document.getElementById('kpi-ventas').innerText],
+            ["Estado Merma", document.getElementById('kpi-porcentaje').innerText]
+        ];
+        const wsKPI = XLSX.utils.aoa_to_sheet(kpiData);
+        XLSX.utils.book_append_sheet(wb, wsKPI, "Dashboard");
+
+        // Pestaña 2: Detalle (datosParaExportar ya contiene el detalle)
+        const wsDetalle = XLSX.utils.json_to_sheet(datosParaExportar);
+        XLSX.utils.book_append_sheet(wb, wsDetalle, "Detalle Completo");
+        
+    } else {
+        // Si es Desvíos, una sola pestaña con los datos
+        const wsDesvios = XLSX.utils.json_to_sheet(datosParaExportar);
+        XLSX.utils.book_append_sheet(wb, wsDesvios, "Desvíos");
+    }
+
+    // 3. Descargar
+    XLSX.writeFile(wb, `Reporte_Completo_${modoActual}_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`);
+}
         async function procesarYAnalizar() {
             const fileInput = document.getElementById('excelFile');
             const file = fileInput.files[0];
@@ -151,7 +176,9 @@
             if (modoActual === 'mermas') {
                 const ventasRaw = document.getElementById('totalVentas').value.trim();
                 const ventas = parseFloat(ventasRaw.replace(/\./g, '').replace(',', '.')) || 0;
-                if (!ventas) { alert("Falta el monto de ventas"); return; }
+                if (!ventas) {  document.getElementById('modalText').innerText = "Falta cargar el monto total de ventas.";
+                document.getElementById('errorModal').style.display = 'flex'; // Usamos flex para centrar
+                return;}
 
                 const movCol = headers.lastIndexOf("MOV");
                 const costoCol = headers.lastIndexOf("COSTU");
@@ -173,12 +200,30 @@
                 const datosFinales = Object.keys(resumen).map(p => ({ Producto: p, Cantidad: resumen[p].cant, PrecioUnitario: resumen[p].costo, Total: resumen[p].cant * resumen[p].costo }));
                 const perdidaTotal = datosFinales.reduce((acc, item) => acc + item.Total, 0);
                 const totalCant = datosFinales.reduce((acc, item) => acc + item.Cantidad, 0);
-                const porcentaje = ventas > 0 ? ((perdidaTotal / ventas) * 100).toFixed(1) : "0";
+
+                // Cálculo del porcentaje (numérico) para la lógica
+                const porcentaje = ventas > 0 ? ((perdidaTotal / ventas) * 100) : 0;
                 datosParaExportar = datosFinales;
 
+                // --- NUEVA LÓGICA DE ESTADO SIN NÚMERO ---
                 const elPorcentaje = document.getElementById('kpi-porcentaje');
-                elPorcentaje.className = 'kpi-value ' + (parseFloat(porcentaje) > 3 ? 'merma-rojo' : 'merma-verde');
-                elPorcentaje.innerHTML = `${porcentaje}% <span class="estado-label">${parseFloat(porcentaje) > 3 ? "Fuera de parámetro" : "Dentro de parámetro"}</span>`;
+                let estadoTexto = "";
+                let claseEstado = "";
+
+                if (porcentaje <= 3) {
+                    estadoTexto = "Dentro de parámetro";
+                    claseEstado = "merma-verde";
+                } else if (porcentaje <= 5) {
+                    estadoTexto = "Atención (Revisar Mermas)";
+                    claseEstado = "merma-amarillo";
+                } else {
+                    estadoTexto = "Fuera de parámetro";
+                    claseEstado = "merma-rojo";
+                }
+
+                elPorcentaje.className = 'kpi-value ' + claseEstado;
+                elPorcentaje.innerHTML = `<span class="estado-label">${estadoTexto}</span>`;
+                // ------------------------------------------
 
                 document.getElementById('kpi-cantidad').innerText = totalCant.toFixed(2);
                 document.getElementById('kpi-perdida').innerText = '$' + perdidaTotal.toLocaleString('es-AR', { minimumFractionDigits: 2 });
